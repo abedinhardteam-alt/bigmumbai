@@ -10,11 +10,14 @@
   const PROMO_ON = "veer_fake_promotion_on";
   const BET_SHOW_KEY = "veer_show_bet_amount"; // default hidden
   const PROFILE_UID_KEY = "veer_profile_uid";
+  const INVITE_KEY = "veer_fake_invite";
+  const INVITE_ON = "veer_fake_invite_on";
 
   const ROW_BAL = "veer-balance-edit-row";
   const ROW_PROMO = "veer-promo-edit-row";
   const ROW_BET = "veer-bet-toggle-row";
   const ROW_UID = "veer-profile-uid-row";
+  const ROW_INVITE = "veer-invite-edit-row";
   const STYLE_ID = "veer-custom-edit-style";
   const STUDIO_ID = "veer-promo-studio";
 
@@ -45,6 +48,13 @@
     "/TeamDayReport",
     "/GetPromotionRecord",
     "/GetDailyProfitRank",
+  ];
+
+  const INVITE_APIS = [
+    "/GetUserInfo",
+    "/NewPromotion",
+    "/GetLoadedSetting",
+    "/GetCommissionDetails",
   ];
 
   const NAME_POOL = [
@@ -118,6 +128,23 @@
   }
   function clearProfileUid() {
     localStorage.removeItem(PROFILE_UID_KEY);
+  }
+  function getFakeInvite() {
+    var v = localStorage.getItem(INVITE_KEY);
+    if (v === null || v === "") return null;
+    v = String(v).trim();
+    return v || null;
+  }
+  function inviteOn() {
+    return localStorage.getItem(INVITE_ON) === "1" && getFakeInvite() !== null;
+  }
+  function setFakeInvite(code) {
+    localStorage.setItem(INVITE_KEY, String(code).trim());
+    localStorage.setItem(INVITE_ON, "1");
+  }
+  function clearFakeInvite() {
+    localStorage.removeItem(INVITE_KEY);
+    localStorage.removeItem(INVITE_ON);
   }
   function profileUidOn() {
     return getProfileUid() !== null;
@@ -743,6 +770,51 @@
       applyNode(obj);
     }
     patchUserProfile(obj);
+    patchInvitePayload(obj);
+    return obj;
+  }
+
+  function rewriteInviteInString(s, code) {
+    if (typeof s !== "string" || !s) return s;
+    var next = s.replace(
+      /([?&#/](?:invitationCode|invitecode|inviteCode|r_code)=)[^&#"']*/gi,
+      "$1" + encodeURIComponent(code)
+    );
+    if (/#\/register/i.test(next) && next.indexOf("invitationCode=") === -1) {
+      next += (next.indexOf("?") >= 0 ? "&" : "?") + "invitationCode=" + encodeURIComponent(code);
+    }
+    return next;
+  }
+
+  function patchInvitePayload(obj) {
+    if (!inviteOn() || obj == null || typeof obj !== "object") return obj;
+    var code = getFakeInvite();
+    if (!code) return obj;
+    function walk(node) {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      [
+        "invitationCode",
+        "InvitationCode",
+        "invitecode",
+        "inviteCode",
+        "invitstionCode",
+        "mycode",
+        "r_code",
+      ].forEach(function (k) {
+        if (k in node) node[k] = code;
+      });
+      ["url", "invitationLink", "inviteUrl", "link", "shareUrl"].forEach(function (k) {
+        if (typeof node[k] === "string") node[k] = rewriteInviteInString(node[k], code);
+      });
+      Object.keys(node).forEach(function (k) {
+        if (node[k] && typeof node[k] === "object") walk(node[k]);
+      });
+    }
+    walk(obj);
     return obj;
   }
 
@@ -862,6 +934,7 @@
     }
 
     if (obj.data && typeof obj.data === "object") applyStats(obj.data);
+    patchInvitePayload(obj);
     return obj;
   }
 
@@ -871,6 +944,7 @@
       var json = JSON.parse(text);
       if (kind === "bal") patchBalancePayload(json);
       if (kind === "promo") patchPromoPayload(json, url, reqBody);
+      if (kind === "invite" || inviteOn()) patchInvitePayload(json);
       return JSON.stringify(json);
     } catch (e) {
       return text;
@@ -880,6 +954,7 @@
   function classifyUrl(url) {
     if (urlHas(url, BALANCE_APIS) && (balOn() || profileUidOn())) return "bal";
     if (urlHas(url, PROMO_APIS) && promoOn()) return "promo";
+    if (inviteOn() && (urlHas(url, INVITE_APIS) || /Invit/i.test(String(url || "")) || /\/api\//.test(String(url || "")))) return "invite";
     return null;
   }
 
@@ -917,8 +992,9 @@
         "readystatechange",
         function () {
           if (this.readyState !== 4) return;
-          if (kind === "bal" && !balOn()) return;
-          if (kind === "promo" && !promoOn()) return;
+          if (kind === "bal" && !balOn() && !profileUidOn() && !inviteOn()) return;
+          if (kind === "promo" && !promoOn() && !inviteOn()) return;
+          if (kind === "invite" && !inviteOn()) return;
           try {
             var desc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "responseText");
             var raw = desc && desc.get ? desc.get.call(this) : this.responseText;
@@ -969,6 +1045,8 @@
       ROW_BET +
       ",#" +
       ROW_UID +
+      ",#" +
+      ROW_INVITE +
       "{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(255,255,255,.06);background:transparent}" +
       "#" +
       ROW_BAL +
@@ -987,6 +1065,8 @@
       ROW_BET +
       " h5,#" +
       ROW_UID +
+      " h5,#" +
+      ROW_INVITE +
       " h5{margin:0;font-size:14px;font-weight:500;color:#fff}" +
       "#" +
       ROW_BAL +
@@ -996,6 +1076,8 @@
       ROW_BET +
       " .veer-right,#" +
       ROW_UID +
+      " .veer-right,#" +
+      ROW_INVITE +
       " .veer-right{display:flex;align-items:center;gap:8px;opacity:.9;font-size:13px;color:rgba(255,255,255,.85)}" +
       "#" +
       ROW_BAL +
@@ -1005,6 +1087,8 @@
       ROW_BET +
       ":active,#" +
       ROW_UID +
+      ":active,#" +
+      ROW_INVITE +
       ":active{background:rgba(255,255,255,.04)}" +
       ".veer-badge{font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(46,204,113,.18);color:#2ecc71}" +
       ".veer-backdrop{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px}" +
@@ -1615,6 +1699,13 @@
       if (span4) span4.textContent = profileUidOn() ? getProfileUid() : "Edit";
       if (badge4) badge4.style.display = profileUidOn() ? "inline-block" : "none";
     }
+    var invRow = document.getElementById(ROW_INVITE);
+    if (invRow) {
+      var span5 = invRow.querySelector(".veer-val");
+      var badge5 = invRow.querySelector(".veer-badge");
+      if (span5) span5.textContent = inviteOn() ? getFakeInvite() : "Edit";
+      if (badge5) badge5.style.display = inviteOn() ? "inline-block" : "none";
+    }
   }
 
   function makeRow(id, title) {
@@ -1651,10 +1742,25 @@
     });
   }
 
+  function openInviteEdit() {
+    var cur = getFakeInvite() || "";
+    openRowEditSheet("Edit invite code", cur, "text", function (v) {
+      var code = String(v || "").trim();
+      if (!code) {
+        clearFakeInvite();
+      } else {
+        setFakeInvite(code);
+      }
+      updateRowLabels();
+      location.reload();
+    });
+  }
+
   function runToolAction(id) {
     if (id === ROW_BAL) openBalanceModal();
     else if (id === ROW_PROMO) openPromoStudio();
     else if (id === ROW_UID) openProfileUidEdit();
+    else if (id === ROW_INVITE) openInviteEdit();
     else if (id === ROW_BET) toggleBetAmountSetting();
   }
 
@@ -1714,6 +1820,7 @@
     if (!document.getElementById(ROW_BAL)) return false;
     if (!document.getElementById(ROW_PROMO)) return false;
     if (!document.getElementById(ROW_UID)) return false;
+    if (!document.getElementById(ROW_INVITE)) return false;
     if (!document.getElementById(ROW_BET)) return false;
     var anchor = findNativeUidRow(center) || findNativeNickRow(center);
     if (anchor && host.previousElementSibling !== anchor) return false;
@@ -1759,6 +1866,7 @@
       [ROW_BAL, "Balance Edit"],
       [ROW_PROMO, "Promotion"],
       [ROW_UID, "Profile UID"],
+      [ROW_INVITE, "Invite code"],
       [ROW_BET, "Bet amount"],
     ];
     var title = host.querySelector(".veer-tools-title");
@@ -1779,7 +1887,41 @@
     updateRowLabels();
   }
 
+  function paintInviteDom() {
+    if (!inviteOn()) return;
+    var code = getFakeInvite();
+    if (!code) return;
+    document.querySelectorAll(".partner-code span, .invitation-code, .invite-code").forEach(function (el) {
+      if (el.closest && (el.closest("#veer-settings-tools") || el.closest(".veer-edit-sheet") || el.closest(".veer-modal"))) return;
+      var t = (el.textContent || "").trim();
+      if (!t) return;
+      if (/invitationCode=/i.test(t) || /#\/register/i.test(t) || /\/register\?/i.test(t)) {
+        var n = rewriteInviteInString(t, code);
+        if (n !== t) el.textContent = n;
+        return;
+      }
+      if (/copy/i.test(t) || t.length > 40) return;
+      if (/^[A-Za-z0-9_-]{4,24}$/.test(t) && t !== code) {
+        var parent = el.parentElement;
+        var label = parent && parent.previousElementSibling ? (parent.previousElementSibling.textContent || "") : "";
+        var wrap = el.closest(".partner-code, .partner-title");
+        if (/invite/i.test(label) || (wrap && /partner-code/.test(wrap.className || ""))) {
+          el.textContent = code;
+        }
+      }
+    });
+    document.querySelectorAll("input, textarea").forEach(function (el) {
+      if (!el || el.closest("#veer-settings-tools") || el.closest(".veer-edit-sheet")) return;
+      var v = el.value || "";
+      if (/invitationCode=/i.test(v)) {
+        var nv = rewriteInviteInString(v, code);
+        if (nv !== v) el.value = nv;
+      }
+    });
+  }
+
   function paintDom() {
+    paintInviteDom();
     if (!balOn()) return;
     var text = fmt(getFakeBal());
     document
