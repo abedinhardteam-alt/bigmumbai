@@ -1,1 +1,1 @@
-const s="/bigmumbai/assets/png/close-BQWAMfYu.png";export{s as c};
+const s="/assets/png/close-BQWAMfYu.png";export{s as c};

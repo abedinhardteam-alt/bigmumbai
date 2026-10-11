@@ -1,1 +1,1 @@
-const s="/bigmumbai/assets/png/gameStatsSteps-Bfo7pjSy.png";export{s as _};
+const s="/assets/png/gameStatsSteps-Bfo7pjSy.png";export{s as _};

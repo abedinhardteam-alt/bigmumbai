@@ -1,0 +1,10 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/((?!assets|web|api|favico|icon|manifest|ar-sw|sw-|middleware|custom-balance).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
