@@ -1,0 +1,1 @@
+import{_ as e,I as n,K as i}from"./index-BA9qo8Ju.js";const a={};function c(s,t){return n(),i("div")}const r=e(a,[["render",c],["__file","/home/jenkins/agent/workspace/AR041-Pages-india-bigmumbai/src/views/main/PointDetail/index.vue"]]);export{r as default};
